@@ -68,7 +68,7 @@ func (l *Lox) run(source string) {
 	}
 }
 
-// Error logic - to client decides how to use the implemented logic
+// Error logic - the client decides how to use the implemented logic
 func (l *Lox) reportError(line int, message string) {
 	l.report(line, "", message)
 }

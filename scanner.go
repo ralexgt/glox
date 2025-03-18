@@ -1,5 +1,7 @@
 package main
 
+import "strconv"
+
 type Scanner struct {
 	source []rune
 	tokens []*Token
@@ -104,9 +106,17 @@ func (s *Scanner) scanToken() {
 		s.line++
 
 	default:
-		vm.reportError(s.line, "Unexpected character.")
+		if isDigit(c) {
+			s.scanNumber()
+		} else {
+			vm.reportError(s.line, "Unexpected character.")
+		}
 	}
 
+}
+
+func isDigit(c rune) bool {
+	return c >= '0' && c <= '9'
 }
 
 func (s *Scanner) match(expected rune) bool {
@@ -127,6 +137,14 @@ func (s *Scanner) peek() rune {
 		return 0
 	}
 	return s.source[s.current]
+}
+
+func (s *Scanner) peekNext() rune {
+	if s.current+1 >= len(s.source) {
+		return 0
+	}
+
+	return s.source[s.current+1]
 }
 
 func (s *Scanner) advance() rune {
@@ -153,6 +171,33 @@ func (s *Scanner) scanString() {
 	value := string(s.source[s.start+1 : s.current-1])
 
 	s.addTokenWithLiteral(TokenType_String, value)
+}
+
+func (s *Scanner) scanNumber() {
+	for isDigit(s.peek()) {
+		s.advance()
+	}
+
+	if s.peek() == '.' && isDigit(s.peekNext()) {
+		// consume the .
+		s.advance()
+
+		// consume the digits after the floating point
+		for isDigit(s.peek()) {
+			s.advance()
+		}
+	}
+
+	// TODO: report a parsing error
+	text := string(s.source[s.start:s.current])
+	num, err := strconv.ParseFloat(text, 64)
+	if err != nil {
+		// TODO: use the built-in error interface instead of plain string literals
+		vm.reportError(s.line, "Invalid number literal")
+		return
+	}
+
+	s.addTokenWithLiteral(TokenType_Number, num)
 }
 
 func (s *Scanner) addToken(t TokenType) {
