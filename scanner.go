@@ -83,7 +83,7 @@ func (s *Scanner) scanToken() {
 			s.addToken(TokenType_Greater)
 		}
 
-	// If you encounter 2 slashes in a row, consume the rest of the line *it is a comment*
+	// If it encounters 2 slashes in a row, consume the rest of the line *it is a comment*
 	case '/':
 		if s.match('/') {
 			for s.peek() != '\n' && !s.isAtEnd() {
@@ -92,6 +92,10 @@ func (s *Scanner) scanToken() {
 		} else {
 			s.addToken(TokenType_Slash)
 		}
+
+	// If the scanner encounters string literals
+	case '"':
+		s.scanString()
 
 	case ' ', '\r', '\t':
 		break
@@ -129,6 +133,26 @@ func (s *Scanner) advance() rune {
 	result := s.source[s.current]
 	s.current++
 	return result
+}
+
+func (s *Scanner) scanString() {
+	for s.peek() != '"' && !s.isAtEnd() {
+		if s.peek() == '\n' {
+			s.line++
+		}
+		s.advance()
+	}
+
+	if s.isAtEnd() {
+		vm.reportError(s.line, "Unterminated string.")
+		return
+	}
+
+	s.advance()
+
+	value := string(s.source[s.start+1 : s.current-1])
+
+	s.addTokenWithLiteral(TokenType_String, value)
 }
 
 func (s *Scanner) addToken(t TokenType) {
