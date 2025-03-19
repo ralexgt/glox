@@ -19,7 +19,8 @@ func main() {
 	if len(os.Args) > 2 {
 		fmt.Println("Usage: glox [script]")
 		os.Exit(64)
-	} else if len(os.Args) == 2 {
+	}
+	if len(os.Args) == 2 {
 		vm.runFile(os.Args[1])
 	} else {
 		vm.runPrompt()

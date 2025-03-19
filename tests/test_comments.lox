@@ -1,0 +1,4 @@
+var test = 2;
+
+/* I am a multiline comment 
+* test = 42;

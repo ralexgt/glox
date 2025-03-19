@@ -81,19 +81,22 @@ func (s *Scanner) scanToken() {
 			s.addToken(TokenType_Greater)
 		}
 
-	// If it encounters 2 slashes in a row, consume the rest of the line *it is a comment*
-	case '/':
-		if s.match('/') {
-			for s.peek() != '\n' && !s.isAtEnd() {
-				s.advance()
-			}
-		} else {
-			s.addToken(TokenType_Slash)
-		}
-
 	// If the scanner encounters string literals
 	case '"':
 		s.scanString()
+
+	// If it encounters 2 slashes in a row, consume the rest of the line *it is a comment*
+	// /* */ is multiline comment
+	case '/':
+		if s.match('/') {
+			s.consumeLineComment()
+			break
+		}
+		if s.match('*') {
+			s.consumeMultiLineComment()
+			break
+		}
+		s.addToken(TokenType_Slash)
 
 	case ' ', '\r', '\t':
 		break
@@ -236,4 +239,32 @@ func (s *Scanner) addTokenWithLiteral(t TokenType, literal any) {
 		Literal:   literal,
 		Line:      s.line,
 	})
+}
+
+func (s *Scanner) consumeLineComment() {
+	for s.peek() != '\n' && !s.isAtEnd() {
+		s.advance()
+	}
+}
+
+func (s *Scanner) consumeMultiLineComment() {
+	for !s.isAtEnd() {
+		switch c := s.peek(); c {
+		case '\n':
+			s.line++
+			s.advance()
+
+		case '*':
+			if s.peekNext() == '/' {
+				s.current += 2
+				return
+			}
+			s.advance()
+
+		default:
+			s.advance()
+		}
+	}
+
+	vm.reportError(s.line, ErrUnterminatedComment)
 }
