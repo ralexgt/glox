@@ -31,3 +31,20 @@ type Unary[R any] struct {
 	Operator token.Token
 	Right    Expr[R]
 }
+
+// Implement the Expr interface
+func (e Binary[R]) Accept(visitor Visitor[R]) R {
+	return visitor.VisitBinaryExpr(e)
+}
+
+func (e Grouping[R]) Accept(visitor Visitor[R]) R {
+	return visitor.VisitGroupingExpr(e)
+}
+
+func (e Literal[R]) Accept(visitor Visitor[R]) R {
+	return visitor.VisitLiteralExpr(e)
+}
+
+func (e Unary[R]) Accept(visitor Visitor[R]) R {
+	return visitor.VisitUnaryExpr(e)
+}
