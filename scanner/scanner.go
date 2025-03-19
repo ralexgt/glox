@@ -1,13 +1,14 @@
 package scanner
 
 import (
-	"fmt"
 	"strconv"
 
 	"github.com/ralexgt/glox/errors"
-	"github.com/ralexgt/glox/global"
 	"github.com/ralexgt/glox/token"
 )
+
+// Scanner will use this to report errors
+type ErrorHandler func(line int, err error)
 
 type Scanner struct {
 	source []rune
@@ -16,18 +17,28 @@ type Scanner struct {
 	start   int
 	current int
 	line    int
+
+	errorHandler ErrorHandler // Function to handle errors
 }
 
-func NewScanner(source string) *Scanner {
+// NewScanner takes an ErrorHandler function as an argument
+func NewScanner(source string, errorHandler ErrorHandler) *Scanner {
 	return &Scanner{
-		source: []rune(source),
+		source:       []rune(source),
+		line:         0,            // Initialize line counter
+		errorHandler: errorHandler, // Store the provided error handler
 	}
 }
 
 func (s *Scanner) ScanTokens() {
+	s.Tokens = nil // Clear any previous tokens
 	for !s.isAtEnd() {
 		s.start = s.current
-		s.scanToken()
+		err := s.scanToken()
+		if err != nil {
+			// Error already handled by errorHandler within scanToken, stop scanning
+			return
+		}
 	}
 
 	s.Tokens = append(s.Tokens, &token.Token{
@@ -38,7 +49,7 @@ func (s *Scanner) ScanTokens() {
 	})
 }
 
-func (s *Scanner) scanToken() {
+func (s *Scanner) scanToken() error {
 	c := s.advance()
 
 	switch c {
@@ -88,39 +99,44 @@ func (s *Scanner) scanToken() {
 			s.addToken(token.TokenType_Greater)
 		}
 
-	// If the scanner encounters string literals
 	case '"':
-		s.scanString()
+		if err := s.scanString(); err != nil {
+			return err
+		}
 
-	// If it encounters 2 slashes in a row, consume the rest of the line *it is a comment*
-	// /* */ is multiline comment
 	case '/':
 		if s.match('/') {
 			s.consumeLineComment()
 			break
 		}
 		if s.match('*') {
-			s.consumeMultiLineComment()
+			if err := s.consumeMultiLineComment(); err != nil {
+				return err
+			}
 			break
 		}
 		s.addToken(token.TokenType_Slash)
 
 	case ' ', '\r', '\t':
+		// Ignore whitespace
 		break
 
 	case '\n':
-		s.line++
+		s.line++ // Increment line number on newline
 
 	default:
 		if isDigit(c) {
-			s.scanNumber()
+			if err := s.scanNumber(); err != nil {
+				return err
+			}
 		} else if isAlpha(c) {
 			s.scanIdentifier()
 		} else {
-			global.VM.ReportError(s.line, errors.ErrUnexpectedChar)
+			s.errorHandler(s.line, errors.ErrUnexpectedChar) // Use injected error handler
 		}
 	}
 
+	return nil
 }
 
 func (s *Scanner) isAtEnd() bool {
@@ -132,9 +148,7 @@ func isDigit(c rune) bool {
 }
 
 func isAlpha(c rune) bool {
-	return c >= 'a' && c <= 'z' ||
-		c >= 'A' && c <= 'Z' ||
-		c == '_'
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'
 }
 
 func isAlphaNumeric(c rune) bool {
@@ -142,21 +156,16 @@ func isAlphaNumeric(c rune) bool {
 }
 
 func (s *Scanner) match(expected rune) bool {
-	if s.isAtEnd() {
+	if s.isAtEnd() || s.source[s.current] != expected {
 		return false
 	}
-
-	if s.source[s.current] != expected {
-		return false
-	}
-
 	s.current++
 	return true
 }
 
 func (s *Scanner) peek() rune {
 	if s.isAtEnd() {
-		return 0
+		return 0 // Null rune if at end
 	}
 	return s.source[s.current]
 }
@@ -165,59 +174,55 @@ func (s *Scanner) peekNext() rune {
 	if s.current+1 >= len(s.source) {
 		return 0
 	}
-
 	return s.source[s.current+1]
 }
 
 func (s *Scanner) advance() rune {
-	result := s.source[s.current]
+	char := s.source[s.current]
 	s.current++
-	return result
+	return char
 }
 
-func (s *Scanner) scanString() {
-	for s.peek() != '"' && !s.isAtEnd() {
+func (s *Scanner) scanString() error {
+	for ; s.peek() != '"' && !s.isAtEnd(); s.advance() {
 		if s.peek() == '\n' {
-			s.line++
+			s.line++ // Allow newlines in strings
 		}
-		s.advance()
 	}
 
 	if s.isAtEnd() {
-		global.VM.ReportError(s.line, errors.ErrUnterminatedString)
-		return
+		s.errorHandler(s.line, errors.ErrUnterminatedString) // Use injected error handler
+		return errors.ErrUnterminatedString
 	}
 
-	s.advance()
+	s.advance() // Consume the closing "
 
 	value := string(s.source[s.start+1 : s.current-1])
-
 	s.addTokenWithLiteral(token.TokenType_String, value)
+	return nil
 }
 
-func (s *Scanner) scanNumber() {
+func (s *Scanner) scanNumber() error {
 	for isDigit(s.peek()) {
 		s.advance()
 	}
 
 	if s.peek() == '.' && isDigit(s.peekNext()) {
-		// consume the .
-		s.advance()
-
-		// consume the digits after the floating point
+		s.advance() // Consume the "."
 		for isDigit(s.peek()) {
 			s.advance()
 		}
 	}
 
-	text := string(s.source[s.start:s.current])
-	num, err := strconv.ParseFloat(text, 64)
+	numberStr := string(s.source[s.start:s.current])
+	number, err := strconv.ParseFloat(numberStr, 64)
 	if err != nil {
-		global.VM.ReportError(s.line, errors.ErrInvalidNumber)
-		return
+		s.errorHandler(s.line, errors.ErrInvalidNumber) // Use injected error handler
+		return errors.ErrInvalidNumber
 	}
 
-	s.addTokenWithLiteral(token.TokenType_Number, num)
+	s.addTokenWithLiteral(token.TokenType_Number, number)
+	return nil
 }
 
 func (s *Scanner) scanIdentifier() {
@@ -226,22 +231,21 @@ func (s *Scanner) scanIdentifier() {
 	}
 
 	text := string(s.source[s.start:s.current])
-	if t, ok := token.Keywords[text]; ok {
-		s.addToken(t)
-		return
+	if tokType, isKeyword := token.Keywords[text]; isKeyword {
+		s.addToken(tokType)
+	} else {
+		s.addToken(token.TokenType_Identifier)
 	}
-
-	s.addToken(token.TokenType_Identifier)
 }
 
-func (s *Scanner) addToken(t token.TokenType) {
-	s.addTokenWithLiteral(t, nil)
+func (s *Scanner) addToken(tokenType token.TokenType) {
+	s.addTokenWithLiteral(tokenType, nil)
 }
 
-func (s *Scanner) addTokenWithLiteral(t token.TokenType, literal any) {
+func (s *Scanner) addTokenWithLiteral(tokenType token.TokenType, literal any) {
 	text := string(s.source[s.start:s.current])
 	s.Tokens = append(s.Tokens, &token.Token{
-		TokenType: t,
+		TokenType: tokenType,
 		Lexeme:    text,
 		Literal:   literal,
 		Line:      s.line,
@@ -254,34 +258,18 @@ func (s *Scanner) consumeLineComment() {
 	}
 }
 
-func (s *Scanner) consumeMultiLineComment() {
+func (s *Scanner) consumeMultiLineComment() error {
 	for !s.isAtEnd() {
-		switch c := s.peek(); c {
-		case '\n':
-			s.line++
-			s.advance()
-
-		case '*':
-			if s.peekNext() == '/' {
-				s.current += 2
-				return
-			}
-			s.advance()
-
-		default:
-			s.advance()
+		if s.peek() == '*' && s.peekNext() == '/' {
+			s.current += 2 // Consume "*/"
+			return nil     // Successfully consumed multiline comment
 		}
+		if s.peek() == '\n' {
+			s.line++ // Increment line number for newlines in comments
+		}
+		s.advance() // Consume character within comment
 	}
 
-	global.VM.ReportError(s.line, errors.ErrUnterminatedComment)
-}
-
-// Moved from global to solve circular dependency
-func (l *global.Lox) Run(source string) {
-	scanner := NewScanner(source)
-	scanner.ScanTokens()
-
-	for _, token := range scanner.Tokens {
-		fmt.Println(token)
-	}
+	s.errorHandler(s.line, errors.ErrUnterminatedComment) // Use injected error handler
+	return errors.ErrUnterminatedComment
 }

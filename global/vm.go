@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ralexgt/glox/scanner"
+	"github.com/ralexgt/glox/scanner" // Still imports scanner
 )
 
 type Lox struct {
@@ -58,7 +58,14 @@ func (l *Lox) report(line int, where string, err error) {
 }
 
 func (l *Lox) run(source string) {
-	scanner := scanner.NewScanner(source)
+	// Define an error handler function that uses the Lox instance to report errors
+	errorHandler := func(line int, err error) {
+		VM.ReportError(line, err) // Use the global VM to report errors
+	}
+
+	// Create a new scanner, passing in the source and the error handler
+	scanner := scanner.NewScanner(source, errorHandler)
+
 	scanner.ScanTokens()
 
 	for _, token := range scanner.Tokens {
