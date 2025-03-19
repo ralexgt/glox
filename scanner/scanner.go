@@ -1,10 +1,17 @@
-package main
+package scanner
 
-import "strconv"
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/ralexgt/glox/errors"
+	"github.com/ralexgt/glox/global"
+	"github.com/ralexgt/glox/token"
+)
 
 type Scanner struct {
 	source []rune
-	tokens []*Token
+	Tokens []*token.Token
 
 	start   int
 	current int
@@ -17,14 +24,14 @@ func NewScanner(source string) *Scanner {
 	}
 }
 
-func (s *Scanner) scanTokens() {
+func (s *Scanner) ScanTokens() {
 	for !s.isAtEnd() {
 		s.start = s.current
 		s.scanToken()
 	}
 
-	s.tokens = append(s.tokens, &Token{
-		TokenType: TokenType_EOF,
+	s.Tokens = append(s.Tokens, &token.Token{
+		TokenType: token.TokenType_EOF,
 		Lexeme:    "",
 		Literal:   nil,
 		Line:      s.line,
@@ -36,49 +43,49 @@ func (s *Scanner) scanToken() {
 
 	switch c {
 	case '(':
-		s.addToken(TokenType_LeftParen)
+		s.addToken(token.TokenType_LeftParen)
 	case ')':
-		s.addToken(TokenType_RightParen)
+		s.addToken(token.TokenType_RightParen)
 	case '{':
-		s.addToken(TokenType_LeftBrace)
+		s.addToken(token.TokenType_LeftBrace)
 	case '}':
-		s.addToken(TokenType_RightBrace)
+		s.addToken(token.TokenType_RightBrace)
 	case ',':
-		s.addToken(TokenType_Comma)
+		s.addToken(token.TokenType_Comma)
 	case '.':
-		s.addToken(TokenType_Dot)
+		s.addToken(token.TokenType_Dot)
 	case '-':
-		s.addToken(TokenType_Minus)
+		s.addToken(token.TokenType_Minus)
 	case '+':
-		s.addToken(TokenType_Plus)
+		s.addToken(token.TokenType_Plus)
 	case '*':
-		s.addToken(TokenType_Star)
+		s.addToken(token.TokenType_Star)
 	case ';':
-		s.addToken(TokenType_Semicolon)
+		s.addToken(token.TokenType_Semicolon)
 
 	case '!':
 		if s.match('=') {
-			s.addToken(TokenType_BangEqual)
+			s.addToken(token.TokenType_BangEqual)
 		} else {
-			s.addToken(TokenType_Bang)
+			s.addToken(token.TokenType_Bang)
 		}
 	case '=':
 		if s.match('=') {
-			s.addToken(TokenType_EqualEqual)
+			s.addToken(token.TokenType_EqualEqual)
 		} else {
-			s.addToken(TokenType_Equal)
+			s.addToken(token.TokenType_Equal)
 		}
 	case '<':
 		if s.match('=') {
-			s.addToken(TokenType_LessEqual)
+			s.addToken(token.TokenType_LessEqual)
 		} else {
-			s.addToken(TokenType_Less)
+			s.addToken(token.TokenType_Less)
 		}
 	case '>':
 		if s.match('=') {
-			s.addToken(TokenType_GreaterEqual)
+			s.addToken(token.TokenType_GreaterEqual)
 		} else {
-			s.addToken(TokenType_Greater)
+			s.addToken(token.TokenType_Greater)
 		}
 
 	// If the scanner encounters string literals
@@ -96,7 +103,7 @@ func (s *Scanner) scanToken() {
 			s.consumeMultiLineComment()
 			break
 		}
-		s.addToken(TokenType_Slash)
+		s.addToken(token.TokenType_Slash)
 
 	case ' ', '\r', '\t':
 		break
@@ -110,7 +117,7 @@ func (s *Scanner) scanToken() {
 		} else if isAlpha(c) {
 			s.scanIdentifier()
 		} else {
-			vm.reportError(s.line, ErrUnexpectedChar)
+			global.VM.ReportError(s.line, errors.ErrUnexpectedChar)
 		}
 	}
 
@@ -177,7 +184,7 @@ func (s *Scanner) scanString() {
 	}
 
 	if s.isAtEnd() {
-		vm.reportError(s.line, ErrUnterminatedString)
+		global.VM.ReportError(s.line, errors.ErrUnterminatedString)
 		return
 	}
 
@@ -185,7 +192,7 @@ func (s *Scanner) scanString() {
 
 	value := string(s.source[s.start+1 : s.current-1])
 
-	s.addTokenWithLiteral(TokenType_String, value)
+	s.addTokenWithLiteral(token.TokenType_String, value)
 }
 
 func (s *Scanner) scanNumber() {
@@ -206,11 +213,11 @@ func (s *Scanner) scanNumber() {
 	text := string(s.source[s.start:s.current])
 	num, err := strconv.ParseFloat(text, 64)
 	if err != nil {
-		vm.reportError(s.line, ErrInvalidNumber)
+		global.VM.ReportError(s.line, errors.ErrInvalidNumber)
 		return
 	}
 
-	s.addTokenWithLiteral(TokenType_Number, num)
+	s.addTokenWithLiteral(token.TokenType_Number, num)
 }
 
 func (s *Scanner) scanIdentifier() {
@@ -219,21 +226,21 @@ func (s *Scanner) scanIdentifier() {
 	}
 
 	text := string(s.source[s.start:s.current])
-	if t, ok := keywords[text]; ok {
+	if t, ok := token.Keywords[text]; ok {
 		s.addToken(t)
 		return
 	}
 
-	s.addToken(TokenType_Identifier)
+	s.addToken(token.TokenType_Identifier)
 }
 
-func (s *Scanner) addToken(t TokenType) {
+func (s *Scanner) addToken(t token.TokenType) {
 	s.addTokenWithLiteral(t, nil)
 }
 
-func (s *Scanner) addTokenWithLiteral(t TokenType, literal any) {
+func (s *Scanner) addTokenWithLiteral(t token.TokenType, literal any) {
 	text := string(s.source[s.start:s.current])
-	s.tokens = append(s.tokens, &Token{
+	s.Tokens = append(s.Tokens, &token.Token{
 		TokenType: t,
 		Lexeme:    text,
 		Literal:   literal,
@@ -266,5 +273,15 @@ func (s *Scanner) consumeMultiLineComment() {
 		}
 	}
 
-	vm.reportError(s.line, ErrUnterminatedComment)
+	global.VM.ReportError(s.line, errors.ErrUnterminatedComment)
+}
+
+// Moved from global to solve circular dependency
+func (l *global.Lox) Run(source string) {
+	scanner := NewScanner(source)
+	scanner.ScanTokens()
+
+	for _, token := range scanner.Tokens {
+		fmt.Println(token)
+	}
 }

@@ -1,5 +1,5 @@
 //go:generate stringer -type=TokenType -trimprefix=TokenType_ ./token_type.go
-package main
+package token
 
 // implement enum TokenType
 type TokenType int
@@ -51,7 +51,7 @@ const (
 	TokenType_EOF
 )
 
-var keywords map[string]TokenType = map[string]TokenType{
+var Keywords map[string]TokenType = map[string]TokenType{
 	"and":    TokenType_And,
 	"class":  TokenType_Class,
 	"else":   TokenType_Else,
