@@ -69,11 +69,11 @@ func (l *Lox) run(source string) {
 }
 
 // Error logic - the client decides how to use the implemented logic
-func (l *Lox) reportError(line int, message string) {
-	l.report(line, "", message)
+func (l *Lox) reportError(line int, err error) {
+	l.report(line, "", err)
 }
 
-func (l *Lox) report(line int, where string, message string) {
-	fmt.Printf("[line %d] Error %s: %s\n", line, where, message)
+func (l *Lox) report(line int, where string, err error) {
+	fmt.Printf("[line %d] Error %s: %s\n", line, where, err)
 	l.hadError = true
 }
